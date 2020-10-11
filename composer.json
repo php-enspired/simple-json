@@ -1,0 +1,14 @@
+{
+    "name": "at/simple-json",
+    "description": "Convenience wrapper for json encoding/decoding.",
+    "type": "library",
+    "license": "GPL-3.0-only",
+    "authors": [
+        {
+            "name": "Adrian",
+            "email": "adrian@enspi.red"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {}
+}
