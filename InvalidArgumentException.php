@@ -22,35 +22,35 @@ namespace AT\Simple\Json;
 
 use AT\Exceptable\Spl\InvalidArgumentException as InvalidArgumentExceptable;
 
+use const JSON_ERROR_UNSUPPORTED_TYPE;
+
 /**
  * Represents invalid arguments passed to Json methods.
  */
 class InvalidArgumentException extends InvalidArgumentExceptable {
 
-  /** @var int DECODE_ASSOC must be boolean. */
-  public const INVALID_DECODE_ASSOC = 1;
-
-  /** @var int DECODE_DEPTH must be integer. */
-  public const INVALID_DECODE_DEPTH = 2;
-
-  /** @var int DECODE_FLAGS must be integer. */
+  /**
+   * @var int INVALID_ASSOC         Option must be boolean.
+   * @var int INVALID_DEPTH         Option must be integer.
+   * @var int INVALID_DECODE_FLAGS  Option must be integer.
+   * @var int INVALID_ENCODE_FLAGS  Option must be integer.
+   * @var int UNSUPPORTED_TYPE      @see https://php.net/json.constants JSON_ERROR_UNSUPPORTED_TYPE
+   */
+  public const INVALID_ASSOC = 1;
+  public const INVALID_DEPTH = 2;
   public const INVALID_DECODE_FLAGS = 3;
-
-  /** @var int ENCODE_FLAGS must be integer. */
   public const INVALID_ENCODE_FLAGS = 4;
-
-  /** @var int ENCODE_DEPTH must be integer. */
-  public const INVALID_ENCODE_DEPTH = 5;
+  public const UNSUPPORTED_TYPE = JSON_ERROR_UNSUPPORTED_TYPE;
 
   /** @see IsExceptable::getInfo() */
   protected const INFO = [
-    self::INVALID_DECODE_ASSOC => [
-      "message" => "DECODE_ASSOC must be boolean",
-      "format" => "DECODE_ASSOC must be boolean; {type} provided"
+    self::INVALID_ASSOC => [
+      "message" => "ASSOC must be boolean",
+      "format" => "ASSOC must be boolean; {type} provided"
     ],
-    self::INVALID_DECODE_DEPTH => [
-      "message" => "DECODE_DEPTH must be integer",
-      "format" => "DECODE_DEPTH must be integer; {type} provided"
+    self::INVALID_DEPTH => [
+      "message" => "DEPTH must be integer",
+      "format" => "DEPTH must be integer; {type} provided"
     ],
     self::INVALID_DECODE_FLAGS => [
       "message" => "DECODE_FLAGS must be integer",
@@ -60,9 +60,9 @@ class InvalidArgumentException extends InvalidArgumentExceptable {
       "message" => "ENCODE_FLAGS must be integer",
       "format" => "ENCODE_FLAGS must be integer; {type} provided"
     ],
-    self::INVALID_ENCODE_DEPTH => [
-      "message" => "ENCODE_DEPTH must be integer",
-      "format" => "ENCODE_DEPTH must be integer; {type} provided"
+    self::UNSUPPORTED_TYPE => [
+      "message" => "Type is not supported",
+      "format" => "Type is not supported: {type}"
     ]
   ];
 }

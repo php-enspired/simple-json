@@ -26,10 +26,41 @@ use JsonException,
 
 use AT\Simple\Json\InvalidArgumentException;
 
+use const JSON_ERROR_UNSUPPORTED_TYPE;
+
 /**
  * Convenience wrapper for json encoding/decoding.
  */
 class Json {
+
+  /**
+   * Keys for $options tuples.
+   *
+   * @type int ASSOC         Decode objects as arrays?
+   * @type int DEPTH         Maximum recursion level
+   * @type int DECODE_FLAGS  Decoding options
+   * @type int ENCODE_FLAGS  Encoding options
+   */
+  public const ASSOC = 0;
+  public const DEPTH = 1;
+  public const DECODE_FLAGS = 2;
+  public const ENCODE_FLAGS = 3;
+
+  /**
+   * Default encode and decode options.
+   *
+   * @type bool DEFAULT_ASSOC         Prefer decoding data as arrays
+   * @type int  DEFAULT_DEPTH         Default depth
+   * @type int  DEFAULT_DECODE_FLAGS  Preferred options for json_decode
+   * @type int  DEFAULT_ENCODE_FLAGS  Preferred options for json_encode
+   */
+  protected const DEFAULT_ASSOC = true;
+  protected const DEFAULT_DEPTH = 512;
+  protected const DEFAULT_DECODE_FLAGS = JSON_BIGINT_AS_STRING;
+  protected const DEFAULT_ENCODE_FLAGS = JSON_BIGINT_AS_STRING |
+    JSON_PRESERVE_ZERO_FRACTION |
+    JSON_UNESCAPED_SLASHES |
+    JSON_UNESCAPED_UNICODE;
 
   /**
    * Encode options.
@@ -45,164 +76,152 @@ class Json {
   public const ENCODE_PRETTY = self::DEFAULT_ENCODE_FLAGS | JSON_PRETTY_PRINT;
 
   /**
-   * Keys for decode/encode $options tuples.
+   * Factory: convenience method for building a new Json instance with "ascii" options.
    *
-   * @type int DECODE_ASSOC  Decode objects as arrays?
-   * @type int DECODE_DEPTH  Maximum recursion level to decode
-   * @type int DECODE_FLAGS  Decoding options
-   * @type int ENCODE_FLAGS  Encoding options
-   * @type int ENCODE_DEPTH  Maximum recursion level to encode
+   * @return Json
    */
-  public const DECODE_ASSOC = 0;
-  public const DECODE_DEPTH = 1;
-  public const DECODE_FLAGS = 2;
-  public const ENCODE_FLAGS = 0;
-  public const ENCODE_DEPTH = 1;
-
-  /** @var int  Error code: Json is a string encoding format. */
-  public const JSON_MUST_BE_STRING = 66;
+  public static function ascii() : Json {
+    return new self([self::ENCODE_FLAGS => self::ENCODE_ASCII]);
+  }
 
   /**
-   * Default encode and decode options.
+   * Factory: convenience method for building a new Json instance with default options.
    *
-   * @type bool DEFAULT_ASSOC         Prefer decoding data as arrays
-   * @type int  DEFAULT_DECODE_FLAGS  Preferred options for json_decode
-   * @type int  DEFAULT_ENCODE_FLAGS  Preferred options for json_encode
-   * @type int  DEFAULT_DEPTH         Default depth
+   * @return Json
    */
-  protected const DEFAULT_ASSOC = true;
-  protected const DEFAULT_DECODE_FLAGS = JSON_BIGINT_AS_STRING;
-  protected const DEFAULT_ENCODE_FLAGS = JSON_BIGINT_AS_STRING |
-    JSON_PRESERVE_ZERO_FRACTION |
-    JSON_UNESCAPED_SLASHES |
-    JSON_UNESCAPED_UNICODE;
-  protected const DEFAULT_DEPTH = 512;
+  public static function default() : Json {
+    return new self();
+  }
+
+  /**
+   * Factory: convenience method for building a new Json instance with "hex" options.
+   *
+   * @return Json
+   */
+  public static function hex() : Json {
+    return new self([self::ENCODE_FLAGS => self::ENCODE_HEX]);
+  }
+
+  /**
+   * Factory: convenience method for building a new Json instance with "html" options.
+   *
+   * @return Json
+   */
+  public static function html() : Json {
+    return new self([self::ENCODE_FLAGS => self::ENCODE_HTML]);
+  }
+
+  /**
+   * Factory: convenience method for building a new Json instance with "pretty" options.
+   *
+   * @return Json
+   */
+  public static function pretty() : Json {
+    return new self([self::ENCODE_FLAGS => self::ENCODE_PRETTY]);
+  }
+
+  /**
+   * Parsed encode/decode options.
+   */
+  protected $assoc;
+  protected $depth;
+  protected $decodeFlags;
+  protected $encodeFlags;
+
+  /**
+   * @param array $options  @see setOptions()
+   */
+  public function __construct(array $options = []) {
+    $this->setOptions($options);
+  }
 
   /**
    * Decodes a Json string.
    *
    * @param string $json    The json string to decode
-   * @param array $options  Options for decoding: {
-   *  @var bool ${self::DECODE_ASSOC}  @see https://.php.net/json_decode $assoc
-   *  @var int  ${self::DECODE_DEPTH}  @see https://.php.net/json_decode $depth
-   *  @var int  ${self::DECODE_FLAGS}  @see https://.php.net/json_decode $options
-   * }
-   * @throws InvalidArgumentException  INVALID_DECODE_ASSOC if DECODE_ASSOC is not bool
-   * @throws InvalidArgumentException  INVALID_DECODE_DEPTH if DECODE_DEPTH is not an int
-   * @throws InvalidArgumentException  INVALID_DECODE_FLAGS if DECODE_FLAGS is not an int
-   * @throws JsonException             If decoding fails
-   * @return mixed                     The decoded data on success
+   * @throws JsonException  If decoding fails
+   * @return mixed          The decoded data on success
    */
-  public static function decode(string $json, array $options = []) {
-    return json_decode($json, ...self::parseDecodeOptions($options));
+  public static function decode(string $json) {
+    return json_decode($json, $this->assoc, $this->depth, $this->decodeFlags);
   }
 
   /**
    * Encodes a value as Json.
    *
+   * Note, objects are considered "encodable" only if they are stdClass or JsonSerializable.
+   * Pass $strict = false to override this.
+   *
    * @param mixed $data     Data to encode
-   * @param array $options  Options for encoding: {
-   *  @var int ${self::ENCODE_FLAGS}  @see https://.php.net/json_encode $options
-   *  @var int ${self::ENCODE_DEPTH}  @see https://.php.net/json_encode $depth
-   * }
-   * @throws InvalidArgumentException  INVALID_ENCODE_FLAGS if ENCODE_FLAGS is not an int
-   * @throws InvalidArgumentException  INVALID_ENCODE_DEPTH if ENCODE_DEPTH is not an int
-   * @throws JsonException             If encoding fails
-   * @return string                    The encoded json string on success
+   * @param bool  $strict   Don't encode non-json-able objects?
+   * @throws JsonException  If encoding fails
+   * @return string         The encoded json string on success
    */
-  public static function encode($data, array $options = []) : string {
-    return json_encode($data, ...self::parseEncodeOptions($options));
-  }
-
-  /**
-   * Can the given value be encoded as json?
-   *
-   * Note; this method considers objects "encodable" only if they are stdClass or JsonSerializable.
-   */
-  public static function isJsonable($value) : bool {
-    return is_object($value) ?
-      ($value instanceof stdClass || $value instanceof JsonSerializable) :
-      ! is_resource($value);
-  }
-
-  /**
-   * Is the given value a valid json string?
-   *
-   * @param mixed          $value   The value to check
-   * @param Throwable|null &$error  Filled if json is invalid; null otherwise
-   * @return bool                   True if value is valid json; false otherwise
-   */
-  public static function isValid($value, &$error = null) : bool {
-    $error = null;
-
-    try {
-      self::decode($value);
-      return true;
-    } catch (TypeError | JsonException $e) {
-      $error = $e;
-      return false;
+  public static function encode($data, bool $strict = true) : string {
+    if (
+      is_object($data) &&
+      ! ($data instanceof stdClass || $data instanceof JsonSerializable)
+    ) {
+      $e = new InvalidArgumentException(
+        InvalidArgumentException::UNSUPPORTED_TYPE,
+        ['type' => get_class($data)]
+      );
+      throw new JsonException($e->getMessage(), JSON_ERROR_UNSUPPORTED_TYPE, $e);
     }
+
+    return json_encode($data, $this->encodeFlags, $this->depth);
   }
 
   /**
-   * Parses decode options.
+   * Sets encode/decode options.
    *
-   * @param array $options             Options to parse
-   * @throws InvalidArgumentException  If any options are invalid; @see Json::decode() $options
-   * @return array                     Options tuple: [assoc, depth, flags]
+   * @param array $options             Options to parse: {
+   *  @var bool ${self::ASSOC}         @see https://php.net/json_decode $assoc
+   *  @var int  ${self::DEPTH}         @see https://php.net/json_decode $depth
+   *  @var int  ${self::DECODE_FLAGS}  @see https://php.net/json_decode $options
+   *  @var int  ${self::ENCODE_FLAGS}  @see https://php.net/json_encode $options
+   * }
+   * @throws InvalidArgumentException  If any options are invalid
+   * @return Json                      $this
    */
-  protected static function parseDecodeOptions(array $options) : array {
+  public function setOptions(array $options) : Json {
     $assoc = $options[self::DECODE_ASSOC] ?? self::DEFAULT_ASSOC;
     if (! is_bool($assoc)) {
       InvalidArgumentException::throw(
-        InvalidArgumentException::INVALID_DECODE_ASSOC,
+        InvalidArgumentException::INVALID_ASSOC,
         ["type" => gettype($assoc)]
       );
     }
 
     $depth = $options[self::DECODE_DEPTH] ?? self::DEFAULT_DEPTH;
-    if (! is_int($depth)) {
+    if (! is_int($depth) || $depth < 0) {
       InvalidArgumentException::throw(
-        InvalidArgumentException::INVALID_DECODE_DEPTH,
+        InvalidArgumentException::INVALID_DEPTH,
         ["type" => gettype($depth)]
       );
     }
 
-    $flags = $options[self::DECODE_FLAGS] ?? self::DEFAULT_DECODE_FLAGS;
-    if (! is_int($flags)) {
+    $decodeFlags = $options[self::DECODE_FLAGS] ?? self::DEFAULT_DECODE_FLAGS;
+    if (! is_int($flags) || $depth < 0) {
       InvalidArgumentException::throw(
         InvalidArgumentException::INVALID_DECODE_FLAGS,
         ["type" => gettype($flags)]
       );
     }
 
-    return [$assoc, $depth, $flags | JSON_THROW_ON_ERROR];
-  }
-
-  /**
-   * Parses encode options.
-   *
-   * @param array $options             Options to parse
-   * @throws InvalidArgumentException  If any options are invalid; @see Json::encode() $options
-   * @return array                     Options tuple: [flags, depth]
-   */
-  protected static function parseEncodeOptions(array $options) : array {
-    $flags = $options[self::ENCODE_FLAGS] ?? self::DEFAULT_ENCODE_FLAGS;
-    if (! is_int($flags)) {
+    $encodeFlags = $options[self::ENCODE_FLAGS] ?? self::DEFAULT_ENCODE_FLAGS;
+    if (! is_int($flags) || $depth < 0) {
       InvalidArgumentException::throw(
         InvalidArgumentException::INVALID_ENCODE_FLAGS,
         ["type" => gettype($flags)]
       );
     }
 
-    $depth = $options[self::ENCODE_DEPTH] ?? self::DEFAULT_DEPTH;
-    if (! is_int($depth)) {
-      InvalidArgumentException::throw(
-        InvalidArgumentException::INVALID_ENCODE_DEPTH,
-        ["type" => gettype($depth)]
-      );
-    }
+    $this->assoc = $assoc;
+    $this->depth = $depth;
+    $this->decodeFlags = $decodeFlags | JSON_THROW_ON_ERROR;
+    $this->encodeFlags = $encodeFlags | JSON_THROW_ON_ERROR;
 
-    return [$flags | JSON_THROW_ON_ERROR, $depth];
+    return $this;
   }
 }
